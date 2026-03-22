@@ -1,0 +1,5 @@
+{
+  "name": "TradingManager",
+  "description": "A premium web app that converts a spreadsheet-based trade tracking system into a beautiful modern dashboard for manual use only.",
+  "requestFramePermissions": []
+}

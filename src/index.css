@@ -1,0 +1,81 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@500;600;700&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+  --font-display: "Space Grotesk", "Inter", sans-serif;
+}
+
+body {
+  font-family: var(--font-sans);
+  background-color: #09090b; /* zinc-950 */
+  color: #fafafa; /* zinc-50 */
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-display);
+}
+
+@media print {
+  body {
+    background-color: white !important;
+    color: black !important;
+  }
+  
+  /* Hide sidebar */
+  aside {
+    display: none !important;
+  }
+
+  /* Reset main content area for printing */
+  main {
+    padding: 0 !important;
+    margin: 0 !important;
+    overflow: visible !important;
+    height: auto !important;
+  }
+
+  /* Make table printer friendly */
+  table {
+    width: 100% !important;
+    border-collapse: collapse !important;
+  }
+  
+  th, td {
+    border: 1px solid #e4e4e7 !important; /* zinc-200 */
+    padding: 8px !important;
+    color: black !important;
+  }
+
+  th {
+    background-color: #f4f4f5 !important; /* zinc-100 */
+    color: #18181b !important; /* zinc-900 */
+    font-weight: 600 !important;
+  }
+
+  /* Override dark mode text colors */
+  .text-zinc-50, .text-zinc-300, .text-zinc-400, .text-zinc-500, .text-emerald-400, .text-red-400 {
+    color: black !important;
+  }
+
+  /* Remove backgrounds */
+  .bg-zinc-900\/50, .bg-zinc-950, .bg-zinc-900\/80, .bg-zinc-800\/30 {
+    background-color: transparent !important;
+  }
+
+  /* Remove borders */
+  .border-zinc-800 {
+    border-color: #e4e4e7 !important;
+  }
+
+  /* Add a title for the printed page */
+  main::before {
+    content: "Trade Journal";
+    display: block;
+    font-size: 24px;
+    font-weight: bold;
+    margin-bottom: 20px;
+    font-family: var(--font-display);
+  }
+}
