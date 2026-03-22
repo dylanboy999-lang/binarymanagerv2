@@ -1,17 +1,18 @@
 import React, { useState } from 'react';
 import { useApp } from '../store/AppContext';
 import { format } from 'date-fns';
-import { Search, Filter, Download, Printer, FileText } from 'lucide-react';
+import { Search, Filter, Download, Printer, FileText, Trash2 } from 'lucide-react';
 import { toPng } from 'html-to-image';
 import { jsPDF } from 'jspdf';
 
 export function TradeJournal() {
-  const { state, updateTrade } = useApp();
+  const { state, updateTrade, clearJournal } = useApp();
   const { sessions } = state;
 
   const [searchTerm, setSearchTerm] = useState('');
   const [editingTradeId, setEditingTradeId] = useState<string | null>(null);
   const [editNotes, setEditNotes] = useState('');
+  const [showConfirmClear, setShowConfirmClear] = useState(false);
 
   // Flatten all trades and attach session info
   const allTrades = sessions.flatMap((session) =>
@@ -99,6 +100,11 @@ export function TradeJournal() {
     }
   };
 
+  const handleClearJournal = () => {
+    clearJournal();
+    setShowConfirmClear(false);
+  };
+
   return (
     <div className="space-y-6 print:space-y-0">
       <div className="flex justify-between items-center print:hidden">
@@ -107,6 +113,31 @@ export function TradeJournal() {
           <p className="text-zinc-400 mt-1">Review and manage all your historical trades.</p>
         </div>
         <div className="flex gap-2">
+          {showConfirmClear ? (
+            <div className="flex items-center gap-2 bg-red-950/50 border border-red-900/50 rounded-md p-1 px-3">
+              <span className="text-sm text-zinc-300 mr-2">Are you sure?</span>
+              <button
+                onClick={handleClearJournal}
+                className="inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 bg-red-500 text-zinc-950 hover:bg-red-500/90 h-8 px-3 py-1"
+              >
+                Yes
+              </button>
+              <button
+                onClick={() => setShowConfirmClear(false)}
+                className="inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 border border-zinc-800 bg-transparent text-zinc-300 hover:bg-zinc-800 h-8 px-3 py-1"
+              >
+                Cancel
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={() => setShowConfirmClear(true)}
+              className="inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 border border-red-900/50 bg-red-500/10 text-red-500 hover:bg-red-500/20 h-10 px-4 py-2"
+            >
+              <Trash2 className="mr-2 h-4 w-4" />
+              Clear Journal
+            </button>
+          )}
           <button
             onClick={handlePrint}
             className="inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 disabled:pointer-events-none disabled:opacity-50 border border-amber-900/50 bg-amber-500/10 text-amber-500 hover:bg-amber-500/20 h-10 px-4 py-2"

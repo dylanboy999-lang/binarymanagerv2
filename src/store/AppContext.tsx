@@ -51,6 +51,7 @@ interface AppContextType {
   updateTrade: (sessionId: string, tradeId: string, updates: Partial<Trade>) => void;
   deleteSession: (sessionId: string) => void;
   clearAllData: () => void;
+  clearJournal: () => void;
 }
 
 const defaultSettings: Settings = {
@@ -273,11 +274,22 @@ export function AppProvider({ children }: { children: ReactNode }) {
   };
 
   const clearAllData = () => {
-    setState(initialState);
+    setState((prev) => ({
+      ...prev,
+      settings: defaultSettings,
+    }));
+  };
+
+  const clearJournal = () => {
+    setState((prev) => ({
+      ...prev,
+      sessions: [],
+      activeSessionId: null,
+    }));
   };
 
   return (
-    <AppContext.Provider value={{ state, updateSettings, startSession, endSession, resumeSession, addTrade, updateTrade, deleteSession, clearAllData }}>
+    <AppContext.Provider value={{ state, updateSettings, startSession, endSession, resumeSession, addTrade, updateTrade, deleteSession, clearAllData, clearJournal }}>
       {children}
     </AppContext.Provider>
   );

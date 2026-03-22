@@ -102,13 +102,13 @@ export function Settings() {
         <div className="p-6">
           {showConfirmClear ? (
             <div className="space-y-4">
-              <p className="text-sm font-medium text-zinc-300">Are you absolutely sure? This will delete all sessions, trades, and reset settings to default.</p>
+              <p className="text-sm font-medium text-zinc-300">Are you absolutely sure? This will reset all settings to their default values. Your trade journal will not be affected.</p>
               <div className="flex gap-4">
                 <button
                   onClick={handleClearData}
                   className="inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 bg-red-500 text-zinc-950 hover:bg-red-500/90 h-10 px-6 py-2"
                 >
-                  Yes, Delete Everything
+                  Yes, Reset Settings
                 </button>
                 <button
                   onClick={() => setShowConfirmClear(false)}
@@ -121,15 +121,15 @@ export function Settings() {
           ) : (
             <div className="flex items-center justify-between">
               <div>
-                <h4 className="text-sm font-medium text-zinc-300">Clear All Data</h4>
-                <p className="text-xs text-zinc-500 mt-1">Permanently remove all your trading history and reset settings.</p>
+                <h4 className="text-sm font-medium text-zinc-300">Reset Settings</h4>
+                <p className="text-xs text-zinc-500 mt-1">Reset all trading parameters to their default values.</p>
               </div>
               <button
                 onClick={() => setShowConfirmClear(true)}
                 className="inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 border border-red-900/50 bg-transparent text-red-400 hover:bg-red-900/30 h-10 px-4 py-2"
               >
                 <Trash2 className="mr-2 h-4 w-4" />
-                Clear Data
+                Reset Settings
               </button>
             </div>
           )}
