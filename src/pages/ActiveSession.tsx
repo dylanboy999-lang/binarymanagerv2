@@ -5,7 +5,7 @@ import { format } from 'date-fns';
 import { useNavigate } from 'react-router-dom';
 
 export function ActiveSession() {
-  const { state, addTrade, endSession, startSession } = useApp();
+  const { state, addTrade, endSession, startSession, resumeSession } = useApp();
   const navigate = useNavigate();
   const { activeSessionId, sessions, settings } = state;
   const session = sessions.find((s) => s.id === activeSessionId);
@@ -14,6 +14,22 @@ export function ActiveSession() {
   const [payout, setPayout] = useState(settings.defaultPayout.toString());
   const [direction, setDirection] = useState<TradeDirection>('Call');
   const [notes, setNotes] = useState('');
+  const [showInsufficientBalancePopup, setShowInsufficientBalancePopup] = useState(false);
+  const [pendingTradeResult, setPendingTradeResult] = useState<TradeResult | null>(null);
+  const [customTradeAmount, setCustomTradeAmount] = useState('');
+  const [overrideTradeAmount, setOverrideTradeAmount] = useState<number | null>(null);
+  const [showEmoji, setShowEmoji] = useState<'Win' | 'Loss' | null>(null);
+
+  const trades = session?.trades || [];
+  const lastTrade = trades[trades.length - 1];
+  const calculatedNextTradeAmount = lastTrade ? lastTrade.nextTradeAmount : settings.minTradeAmount;
+
+  // Show popup automatically if balance is insufficient
+  useEffect(() => {
+    if (session && session.status === 'active' && session.currentBalance < calculatedNextTradeAmount && overrideTradeAmount === null) {
+      setShowInsufficientBalancePopup(true);
+    }
+  }, [session?.currentBalance, calculatedNextTradeAmount, overrideTradeAmount, session?.status]);
 
   // Auto-redirect if no active session
   if (!session) {
@@ -40,11 +56,63 @@ export function ActiveSession() {
     );
   }
 
-  const trades = session.trades;
-  const lastTrade = trades[trades.length - 1];
-  
-  // Calculate next trade amount
-  const nextTradeAmount = lastTrade ? lastTrade.nextTradeAmount : settings.minTradeAmount;
+  if (session.status !== 'active') {
+    const pl = session.currentBalance - session.startingBalance;
+    const balanceColor = pl > 0 ? 'text-emerald-400' : pl < 0 ? 'text-red-400' : 'text-zinc-50';
+    
+    let reason = 'Session ended manually.';
+    if (session.status === 'stopped_loss_limit') reason = 'Session ended: Loss limit reached (5 consecutive losses).';
+    if (session.status === 'stopped_win_limit') reason = 'Session ended: Win limit reached (10 wins).';
+
+    return (
+      <div className="flex flex-col items-center justify-center h-[60vh] text-center space-y-6">
+        <div className={`w-16 h-16 rounded-full flex items-center justify-center border ${pl > 0 ? 'bg-emerald-500/10 border-emerald-500/20' : pl < 0 ? 'bg-red-500/10 border-red-500/20' : 'bg-zinc-900 border-zinc-800'}`}>
+          {pl > 0 ? <CheckCircle2 className="w-8 h-8 text-emerald-400" /> : pl < 0 ? <XCircle className="w-8 h-8 text-red-400" /> : <StopCircle className="w-8 h-8 text-zinc-500" />}
+        </div>
+        <div>
+          <h2 className="text-2xl font-bold text-zinc-50">Session Completed</h2>
+          <p className="text-zinc-400 mt-2 max-w-md mx-auto">
+            {reason}
+          </p>
+          <div className="mt-6 p-6 rounded-xl border border-zinc-800 bg-zinc-900/50 inline-block text-left min-w-[300px]">
+            <div className="flex justify-between items-center mb-2">
+              <span className="text-zinc-400">Final Balance:</span>
+              <span className={`text-xl font-bold ${balanceColor}`}>${session.currentBalance.toFixed(2)}</span>
+            </div>
+            <div className="flex justify-between items-center mb-2">
+              <span className="text-zinc-400">Total P/L:</span>
+              <span className={`font-medium ${balanceColor}`}>{pl >= 0 ? '+' : ''}{pl.toFixed(2)}</span>
+            </div>
+            <div className="flex justify-between items-center">
+              <span className="text-zinc-400">Total Trades:</span>
+              <span className="text-zinc-50">{session.trades.length}</span>
+            </div>
+          </div>
+        </div>
+        <div className="flex gap-4">
+          <button
+            onClick={() => {
+              resumeSession();
+              setOverrideTradeAmount(session.currentBalance);
+            }}
+            className="inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 disabled:pointer-events-none disabled:opacity-50 bg-emerald-500/20 text-emerald-500 hover:bg-emerald-500/30 h-10 px-6 py-2"
+          >
+            Use Max Balance
+          </button>
+          <button
+            onClick={() => {
+              startSession();
+            }}
+            className="inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 disabled:pointer-events-none disabled:opacity-50 bg-amber-500 text-zinc-950 hover:bg-amber-500/90 h-10 px-6 py-2"
+          >
+            Start New Session
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  const nextTradeAmount = overrideTradeAmount !== null ? overrideTradeAmount : calculatedNextTradeAmount;
 
   // Calculate stats
   const wins = trades.filter((t) => t.result === 'Win').length;
@@ -82,17 +150,39 @@ export function ActiveSession() {
     const numPayout = parseFloat(payout);
     if (isNaN(numPayout)) return;
 
+    if (session.currentBalance < nextTradeAmount) {
+      setPendingTradeResult(result);
+      setShowInsufficientBalancePopup(true);
+      return;
+    }
+
+    executeTrade(result, nextTradeAmount);
+  };
+
+  const executeTrade = (result: TradeResult, amount: number) => {
+    const numPayout = parseFloat(payout);
+    const isMaxTrade = amount === session.currentBalance;
+
     addTrade({
       asset,
       payout: numPayout,
       direction,
       result,
-      tradeAmount: nextTradeAmount,
+      tradeAmount: amount,
       notes,
       timestamp: Date.now(),
     });
 
+    if (isMaxTrade) {
+      setShowEmoji(result);
+      setTimeout(() => setShowEmoji(null), 3000);
+    }
+
     setNotes('');
+    setShowInsufficientBalancePopup(false);
+    setPendingTradeResult(null);
+    setCustomTradeAmount('');
+    setOverrideTradeAmount(null);
   };
 
   const payoutNum = parseFloat(payout);
@@ -217,21 +307,41 @@ export function ActiveSession() {
             </div>
           </div>
 
-          <div className="mt-8 flex gap-4">
-            <button
-              onClick={() => handleLogTrade('Win')}
-              className="flex-1 inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 disabled:pointer-events-none disabled:opacity-50 bg-emerald-500 text-zinc-950 hover:bg-emerald-500/90 h-12 px-8"
-            >
-              <CheckCircle2 className="mr-2 h-5 w-5" />
-              Log Win (+${(nextTradeAmount * (payoutNum / 100)).toFixed(2)})
-            </button>
-            <button
-              onClick={() => handleLogTrade('Loss')}
-              className="flex-1 inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 disabled:pointer-events-none disabled:opacity-50 bg-red-500 text-zinc-950 hover:bg-red-500/90 h-12 px-8"
-            >
-              <XCircle className="mr-2 h-5 w-5" />
-              Log Loss (-${nextTradeAmount.toFixed(2)})
-            </button>
+          <div className="mt-8 flex flex-col gap-4">
+            <div className="flex justify-between items-center bg-zinc-950 p-4 rounded-lg border border-zinc-800">
+               <div>
+                 <span className="text-sm text-zinc-400">Next Trade Amount:</span>
+                 <span className="ml-2 text-xl font-bold text-zinc-50">${nextTradeAmount.toFixed(2)}</span>
+               </div>
+               <div className="flex gap-2">
+                 {overrideTradeAmount !== session.currentBalance && (
+                   <button onClick={() => setOverrideTradeAmount(session.currentBalance)} className="text-xs font-medium bg-amber-500/20 text-amber-500 px-3 py-1.5 rounded-md hover:bg-amber-500/30 transition-colors">
+                     Use Max Balance
+                   </button>
+                 )}
+                 {overrideTradeAmount !== null && (
+                   <button onClick={() => setOverrideTradeAmount(null)} className="text-xs font-medium bg-zinc-800 text-zinc-300 px-3 py-1.5 rounded-md hover:bg-zinc-700 transition-colors">
+                     Reset to Calculated
+                   </button>
+                 )}
+               </div>
+            </div>
+            <div className="flex gap-4">
+              <button
+                onClick={() => handleLogTrade('Win')}
+                className="flex-1 inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 disabled:pointer-events-none disabled:opacity-50 bg-emerald-500 text-zinc-950 hover:bg-emerald-500/90 h-12 px-8"
+              >
+                <CheckCircle2 className="mr-2 h-5 w-5" />
+                Log Win (+${(nextTradeAmount * (payoutNum / 100)).toFixed(2)})
+              </button>
+              <button
+                onClick={() => handleLogTrade('Loss')}
+                className="flex-1 inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 disabled:pointer-events-none disabled:opacity-50 bg-red-500 text-zinc-950 hover:bg-red-500/90 h-12 px-8"
+              >
+                <XCircle className="mr-2 h-5 w-5" />
+                Log Loss (-${nextTradeAmount.toFixed(2)})
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -292,6 +402,90 @@ export function ActiveSession() {
           )}
         </div>
       </div>
+      {/* Insufficient Balance Popup */}
+      {showInsufficientBalancePopup && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+          <div className="bg-zinc-900 border border-zinc-800 rounded-xl shadow-xl max-w-md w-full p-6 space-y-6">
+            <div className="flex items-center gap-3 text-red-400">
+              <AlertCircle className="w-6 h-6" />
+              <h3 className="text-lg font-bold">Insufficient Balance</h3>
+            </div>
+            <p className="text-zinc-300">
+              A trade is not possible because of insufficient balance. Your current balance is <span className="font-bold text-zinc-50">${session.currentBalance.toFixed(2)}</span>, but the next calculated trade amount is <span className="font-bold text-zinc-50">${nextTradeAmount.toFixed(2)}</span>.
+            </p>
+            <p className="text-zinc-400 text-sm">
+              Please enter a new trade amount, or use your remaining balance for this trade.
+            </p>
+            
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-zinc-300">Custom Trade Amount</label>
+              <input
+                type="number"
+                value={customTradeAmount}
+                onChange={(e) => setCustomTradeAmount(e.target.value)}
+                className="flex h-10 w-full rounded-md border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm text-zinc-50 placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                placeholder="Enter amount"
+                max={session.currentBalance}
+              />
+            </div>
+
+            <div className="flex flex-col gap-3 pt-2">
+              <div className="flex gap-3">
+                <button
+                  onClick={() => {
+                    setShowInsufficientBalancePopup(false);
+                    setPendingTradeResult(null);
+                    setCustomTradeAmount('');
+                  }}
+                  className="flex-1 rounded-md border border-zinc-800 bg-zinc-950 px-4 py-2 text-sm font-medium text-zinc-300 hover:bg-zinc-800 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => {
+                    const amt = parseFloat(customTradeAmount);
+                    if (!isNaN(amt) && amt > 0 && amt <= session.currentBalance) {
+                      if (pendingTradeResult) {
+                        executeTrade(pendingTradeResult, amt);
+                      } else {
+                        setOverrideTradeAmount(amt);
+                        setShowInsufficientBalancePopup(false);
+                      }
+                    }
+                  }}
+                  disabled={!customTradeAmount || isNaN(parseFloat(customTradeAmount)) || parseFloat(customTradeAmount) <= 0 || parseFloat(customTradeAmount) > session.currentBalance}
+                  className="flex-1 rounded-md bg-emerald-500 px-4 py-2 text-sm font-medium text-zinc-950 hover:bg-emerald-500/90 transition-colors disabled:opacity-50"
+                >
+                  Trade Custom
+                </button>
+              </div>
+              <button
+                onClick={() => {
+                  if (pendingTradeResult) {
+                    executeTrade(pendingTradeResult, session.currentBalance);
+                  } else {
+                    setOverrideTradeAmount(session.currentBalance);
+                    setShowInsufficientBalancePopup(false);
+                  }
+                }}
+                disabled={session.currentBalance <= 0}
+                className="w-full rounded-md bg-amber-500 px-4 py-2 text-sm font-medium text-zinc-950 hover:bg-amber-500/90 transition-colors disabled:opacity-50"
+              >
+                Trade Max (${session.currentBalance.toFixed(2)})
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Emoji Popup */}
+      {showEmoji && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center pointer-events-none">
+          <div className="text-[50vh] animate-bounce drop-shadow-2xl">
+            {showEmoji === 'Win' ? '🎉' : '😭'}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

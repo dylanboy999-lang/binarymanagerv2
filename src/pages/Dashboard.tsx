@@ -1,6 +1,6 @@
 import React from 'react';
 import { useApp } from '../store/AppContext';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { Play, TrendingUp, TrendingDown, Activity, Target } from 'lucide-react';
 import { format } from 'date-fns';
 
@@ -8,7 +8,7 @@ export function Dashboard() {
   const { state, startSession } = useApp();
   const { sessions, activeSessionId, settings } = state;
 
-  const activeSession = sessions.find((s) => s.id === activeSessionId);
+  const activeSession = sessions.find((s) => s.id === activeSessionId && s.status === 'active');
   const completedSessions = sessions.filter((s) => s.status !== 'active');
 
   const totalTrades = sessions.reduce((acc, s) => acc + s.trades.length, 0);
@@ -19,6 +19,13 @@ export function Dashboard() {
   const currentBalance = activeSession ? activeSession.currentBalance : (completedSessions[0]?.currentBalance || settings.startingBalance);
   const totalProfit = currentBalance - settings.startingBalance;
   const balanceColor = totalProfit > 0 ? 'text-emerald-400' : totalProfit < 0 ? 'text-red-400' : 'text-zinc-50';
+
+  const navigate = useNavigate();
+
+  const handleStartSession = () => {
+    startSession();
+    navigate('/session');
+  };
 
   return (
     <div className="space-y-8">
@@ -37,7 +44,7 @@ export function Dashboard() {
           </Link>
         ) : (
           <button
-            onClick={startSession}
+            onClick={handleStartSession}
             className="inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 disabled:pointer-events-none disabled:opacity-50 bg-amber-500 text-zinc-950 hover:bg-amber-500/90 h-10 px-4 py-2"
           >
             <Play className="mr-2 h-4 w-4" />

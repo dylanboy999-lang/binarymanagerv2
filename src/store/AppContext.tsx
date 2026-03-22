@@ -46,6 +46,7 @@ interface AppContextType {
   updateSettings: (settings: Partial<Settings>) => void;
   startSession: () => void;
   endSession: () => void;
+  resumeSession: () => void;
   addTrade: (trade: Omit<Trade, 'id' | 'tradeNumber' | 'profit' | 'balanceAfter' | 'nextTradeAmount'>) => void;
   updateTrade: (sessionId: string, tradeId: string, updates: Partial<Trade>) => void;
   deleteSession: (sessionId: string) => void;
@@ -91,23 +92,26 @@ export function AppProvider({ children }: { children: ReactNode }) {
   };
 
   const startSession = () => {
-    if (state.activeSessionId) return; // Already active
+    setState((prev) => {
+      const activeSession = prev.sessions.find(s => s.id === prev.activeSessionId);
+      if (activeSession && activeSession.status === 'active') return prev; // Already active
 
-    const newSession: Session = {
-      id: crypto.randomUUID(),
-      startTime: Date.now(),
-      endTime: null,
-      status: 'active',
-      startingBalance: state.settings.startingBalance,
-      currentBalance: state.settings.startingBalance,
-      trades: [],
-    };
+      const newSession: Session = {
+        id: crypto.randomUUID(),
+        startTime: Date.now(),
+        endTime: null,
+        status: 'active',
+        startingBalance: prev.settings.startingBalance,
+        currentBalance: prev.settings.startingBalance,
+        trades: [],
+      };
 
-    setState((prev) => ({
-      ...prev,
-      sessions: [newSession, ...prev.sessions],
-      activeSessionId: newSession.id,
-    }));
+      return {
+        ...prev,
+        sessions: [newSession, ...prev.sessions],
+        activeSessionId: newSession.id,
+      };
+    });
   };
 
   const endSession = () => {
@@ -120,7 +124,20 @@ export function AppProvider({ children }: { children: ReactNode }) {
             ? { ...s, endTime: Date.now(), status: s.status === 'active' ? 'completed' : s.status }
             : s
         ),
-        activeSessionId: null,
+      };
+    });
+  };
+
+  const resumeSession = () => {
+    setState((prev) => {
+      if (!prev.activeSessionId) return prev;
+      return {
+        ...prev,
+        sessions: prev.sessions.map((s) =>
+          s.id === prev.activeSessionId
+            ? { ...s, status: 'active', endTime: null }
+            : s
+        ),
       };
     });
   };
@@ -133,6 +150,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       if (sessionIndex === -1) return prev;
 
       const session = prev.sessions[sessionIndex];
+      if (session.status !== 'active') return prev;
+
       const tradeNumber = session.trades.length + 1;
       
       let profit = 0;
@@ -154,11 +173,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
         }
       }
 
+      const isMaxTrade = tradeInput.tradeAmount === session.currentBalance;
+
       if (tradeInput.result === 'Win') {
         profit = tradeInput.tradeAmount * (tradeInput.payout / 100);
         balanceAfter = session.currentBalance + profit;
         
-        if (state === 'Step1') {
+        if (isMaxTrade) {
+          nextTradeAmount = prev.settings.minTradeAmount;
+        } else if (state === 'Step1') {
           nextTradeAmount = tradeInput.tradeAmount + (0.5 * tradeInput.tradeAmount);
         } else {
           nextTradeAmount = prev.settings.minTradeAmount;
@@ -166,7 +189,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
       } else {
         profit = -tradeInput.tradeAmount;
         balanceAfter = session.currentBalance - tradeInput.tradeAmount;
-        nextTradeAmount = tradeInput.tradeAmount * 2.3;
+        if (isMaxTrade) {
+          nextTradeAmount = prev.settings.minTradeAmount;
+        } else {
+          nextTradeAmount = tradeInput.tradeAmount * 2.3;
+        }
       }
 
       const newTrade: Trade = {
@@ -197,11 +224,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
       if (consecutiveLosses >= 5) {
         newStatus = 'stopped_loss_limit';
-        activeSessionId = null;
         endTime = Date.now();
       } else if (wins >= 10) {
         newStatus = 'stopped_win_limit';
-        activeSessionId = null;
         endTime = Date.now();
       }
 
@@ -252,7 +277,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <AppContext.Provider value={{ state, updateSettings, startSession, endSession, addTrade, updateTrade, deleteSession, clearAllData }}>
+    <AppContext.Provider value={{ state, updateSettings, startSession, endSession, resumeSession, addTrade, updateTrade, deleteSession, clearAllData }}>
       {children}
     </AppContext.Provider>
   );
