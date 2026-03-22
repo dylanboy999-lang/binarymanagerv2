@@ -56,6 +56,18 @@ export function ActiveSession() {
     );
   }
 
+  if (showEmoji) {
+    return (
+      <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black">
+        <img 
+          src={showEmoji === 'Win' ? 'https://media0.giphy.com/media/v1.Y2lkPTc5MGI3NjExcHFqMjVjbW5lc2wwdGs5b2t4aXJqMGoxdGg5Y3FvaWo0bW92OTJ2MSZlcD12MV9naWZzX3NlYXJjaCZjdD1n/2edJTdqnxYviQLZv9D/giphy.gif' : 'https://gifdb.com/images/featured/goku-ssj3-uar1f8cbmqh1hgof.gif'} 
+          alt={showEmoji} 
+          className="w-full h-full object-cover"
+        />
+      </div>
+    );
+  }
+
   if (session.status !== 'active') {
     const pl = session.currentBalance - session.startingBalance;
     const balanceColor = pl > 0 ? 'text-emerald-400' : pl < 0 ? 'text-red-400' : 'text-zinc-50';
@@ -175,7 +187,10 @@ export function ActiveSession() {
 
     if (isMaxTrade) {
       setShowEmoji(result);
-      setTimeout(() => setShowEmoji(null), 3000);
+      setTimeout(() => {
+        setShowEmoji(null);
+        navigate('/');
+      }, 3000);
     }
 
     setNotes('');
@@ -474,15 +489,6 @@ export function ActiveSession() {
                 Trade Max (${session.currentBalance.toFixed(2)})
               </button>
             </div>
-          </div>
-        </div>
-      )}
-
-      {/* Emoji Popup */}
-      {showEmoji && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center pointer-events-none">
-          <div className="text-[50vh] animate-bounce drop-shadow-2xl">
-            {showEmoji === 'Win' ? '🎉' : '😭'}
           </div>
         </div>
       )}
