@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { useApp, TradeDirection, TradeResult } from '../store/AppContext';
-import { AlertCircle, CheckCircle2, XCircle, StopCircle, ArrowRight } from 'lucide-react';
+import { AlertCircle, CheckCircle2, XCircle, StopCircle, ArrowRight, Sparkles, Loader2 } from 'lucide-react';
 import { format } from 'date-fns';
 import { useNavigate } from 'react-router-dom';
+import { GoogleGenAI, Type } from "@google/genai";
 
 export function ActiveSession() {
   const { state, addTrade, endSession, startSession, resumeSession } = useApp();
@@ -19,6 +20,57 @@ export function ActiveSession() {
   const [overrideTradeAmount, setOverrideTradeAmount] = useState<number | null>(null);
   const [showEmoji, setShowEmoji] = useState<'Win' | 'Loss' | null>(null);
   const [showEndSessionConfirm, setShowEndSessionConfirm] = useState(false);
+  const [smartInput, setSmartInput] = useState('');
+  const [isSmartLoading, setIsSmartLoading] = useState(false);
+  const [smartError, setSmartError] = useState('');
+
+  const handleSmartEntry = async () => {
+    if (!smartInput.trim()) return;
+    setIsSmartLoading(true);
+    setSmartError('');
+
+    try {
+      const apiKey = process.env.GEMINI_API_KEY;
+      if (!apiKey) throw new Error("Gemini API key is not configured.");
+      
+      const ai = new GoogleGenAI({ apiKey });
+      const response = await ai.models.generateContent({
+        model: "gemini-3-flash-preview",
+        contents: `Extract the requested details from the user's trading entry: "${smartInput}". If any are missing, Omit them. Normalize the asset to standard pair format (e.g. EUR/USD). If the user mentions a result condition like "win" or "lost", extract that into result.`,
+        config: {
+          responseMimeType: "application/json",
+          responseSchema: {
+            type: Type.OBJECT,
+            properties: {
+              asset: { type: Type.STRING, description: "The asset pair, e.g. EUR/USD, GBP/USD OTC, Crypto, etc." },
+              payout: { type: Type.NUMBER, description: "The payout percentage (e.g. 85)" },
+              direction: { type: Type.STRING, description: "Must be exactly 'Call' or 'Put'" },
+              amount: { type: Type.NUMBER, description: "The trade amount, if specified" },
+              result: { type: Type.STRING, description: "Must be exactly 'Win' or 'Loss', if specified" }
+            },
+          },
+        },
+      });
+      
+      const text = response.text?.trim();
+      if (!text) throw new Error("Could not parse result.");
+      const parsed = JSON.parse(text);
+      
+      if (parsed.asset) setAsset(parsed.asset);
+      if (parsed.payout) setPayout(parsed.payout.toString());
+      if (parsed.direction === 'Call' || parsed.direction === 'Put') setDirection(parsed.direction);
+      if (parsed.amount) {
+        setCustomTradeAmount(parsed.amount.toString());
+        setOverrideTradeAmount(parsed.amount);
+      }
+      
+      setSmartInput('');
+    } catch (e: any) {
+      setSmartError(e.message || "Failed to process text.");
+    } finally {
+      setIsSmartLoading(false);
+    }
+  };
 
   const trades = session?.trades || [];
   const lastTrade = trades[trades.length - 1];
@@ -256,20 +308,68 @@ export function ActiveSession() {
 
       {/* Trade Entry Form */}
       <div className="rounded-xl border border-zinc-800 bg-zinc-900/50 overflow-hidden">
-        <div className="p-6 border-b border-zinc-800">
+        <div className="p-6 border-b border-zinc-800 flex flex-col md:flex-row md:items-center justify-between gap-4">
           <h3 className="text-lg font-medium text-zinc-50">Log Next Trade</h3>
+          <div className="flex-1 max-w-md w-full relative">
+            <div className="relative flex items-center">
+              <input
+                type="text"
+                placeholder="Smart Entry: e.g. '85% payout on EUR/USD Call'"
+                value={smartInput}
+                onChange={(e) => setSmartInput(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handleSmartEntry()}
+                className="flex h-10 w-full rounded-md border border-indigo-500/30 bg-indigo-500/5 px-3 py-2 pl-9 pr-24 text-sm text-zinc-50 placeholder:text-zinc-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                disabled={isSmartLoading}
+              />
+              <Sparkles className="absolute left-3 w-4 h-4 text-indigo-400" />
+              <button
+                onClick={handleSmartEntry}
+                disabled={isSmartLoading || !smartInput.trim()}
+                className="absolute right-1 top-1 bottom-1 px-3 text-xs font-medium bg-indigo-500 text-white rounded hover:bg-indigo-600 disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
+              >
+                {isSmartLoading ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : null}
+                Extract
+              </button>
+            </div>
+            {smartError && <p className="text-xs text-red-400 mt-1 absolute -bottom-5">{smartError}</p>}
+          </div>
         </div>
         <div className="p-6">
           <div className="grid gap-6 md:grid-cols-4">
             <div className="space-y-2">
-              <label className="text-sm font-medium text-zinc-300">Asset Pair</label>
+              <div className="flex items-center justify-between">
+                <label className="text-sm font-medium text-zinc-300">Asset Pair</label>
+                {lastTrade && (
+                  <button
+                    onClick={() => {
+                      setAsset(lastTrade.asset);
+                      setPayout(lastTrade.payout.toString());
+                    }}
+                    className="text-xs text-emerald-400 hover:text-emerald-300 whitespace-nowrap transition-colors"
+                  >
+                    Last: {lastTrade.asset} ({lastTrade.payout}%)
+                  </button>
+                )}
+              </div>
               <input
                 type="text"
+                list="asset-list"
                 value={asset}
                 onChange={(e) => setAsset(e.target.value)}
                 className="flex h-10 w-full rounded-md border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm text-zinc-50 placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-emerald-500"
                 placeholder="e.g. EUR/USD"
               />
+              <datalist id="asset-list">
+                <option value="EUR/USD" />
+                <option value="GBP/USD" />
+                <option value="USD/JPY" />
+                <option value="AUD/USD" />
+                <option value="USD/CAD" />
+                <option value="USD/CHF" />
+                <option value="NZD/USD" />
+                <option value="EUR/USD OTC" />
+                <option value="GBP/USD OTC" />
+              </datalist>
             </div>
             <div className="space-y-2">
               <label className="text-sm font-medium text-zinc-300">Payout %</label>
