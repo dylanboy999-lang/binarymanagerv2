@@ -16,7 +16,6 @@ export interface Trade {
   profit: number;
   balanceAfter: number;
   nextTradeAmount: number;
-  notes: string;
 }
 
 export interface Session {
@@ -33,6 +32,8 @@ export interface Settings {
   startingBalance: number;
   minTradeAmount: number;
   defaultPayout: number;
+  maxConsecutiveLosses: number;
+  maxWins: number;
 }
 
 interface AppState {
@@ -58,6 +59,8 @@ const defaultSettings: Settings = {
   startingBalance: 100,
   minTradeAmount: 1,
   defaultPayout: 85,
+  maxConsecutiveLosses: 5,
+  maxWins: 10,
 };
 
 const initialState: AppState = {
@@ -86,10 +89,39 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [state]);
 
   const updateSettings = (newSettings: Partial<Settings>) => {
-    setState((prev) => ({
-      ...prev,
-      settings: { ...prev.settings, ...newSettings },
-    }));
+    setState((prev) => {
+      const updatedSettings = { ...prev.settings, ...newSettings };
+      let updatedSessions = prev.sessions;
+
+      if (prev.activeSessionId) {
+        updatedSessions = prev.sessions.map((session) => {
+          if (session.id === prev.activeSessionId && session.status === 'active') {
+            let consecutiveLosses = 0;
+            for (let i = session.trades.length - 1; i >= 0; i--) {
+              if (session.trades[i].result === 'Loss') {
+                consecutiveLosses++;
+              } else {
+                break;
+              }
+            }
+            const wins = session.trades.filter((t) => t.result === 'Win').length;
+            
+            if (consecutiveLosses >= updatedSettings.maxConsecutiveLosses) {
+              return { ...session, status: 'stopped_loss_limit', endTime: Date.now() };
+            } else if (wins >= updatedSettings.maxWins) {
+              return { ...session, status: 'stopped_win_limit', endTime: Date.now() };
+            }
+          }
+          return session;
+        });
+      }
+
+      return {
+        ...prev,
+        settings: updatedSettings,
+        sessions: updatedSessions,
+      };
+    });
   };
 
   const startSession = () => {
@@ -223,10 +255,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
       let activeSessionId = prev.activeSessionId;
       let endTime = session.endTime;
 
-      if (consecutiveLosses >= 5) {
+      if (consecutiveLosses >= prev.settings.maxConsecutiveLosses) {
         newStatus = 'stopped_loss_limit';
         endTime = Date.now();
-      } else if (wins >= 10) {
+      } else if (wins >= prev.settings.maxWins) {
         newStatus = 'stopped_win_limit';
         endTime = Date.now();
       }

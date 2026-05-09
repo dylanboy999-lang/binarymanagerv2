@@ -16,8 +16,8 @@ export function Dashboard() {
   const totalLosses = totalTrades - totalWins;
   const winRate = totalTrades > 0 ? ((totalWins / totalTrades) * 100).toFixed(1) : '0.0';
 
-  const currentBalance = activeSession ? activeSession.currentBalance : (completedSessions[0]?.currentBalance || settings.startingBalance);
-  const totalProfit = currentBalance - settings.startingBalance;
+  const currentBalance = activeSession ? activeSession.currentBalance : settings.startingBalance;
+  const totalProfit = sessions.reduce((acc, s) => acc + (s.currentBalance - s.startingBalance), 0);
   const balanceColor = totalProfit > 0 ? 'text-emerald-400' : totalProfit < 0 ? 'text-red-400' : 'text-zinc-50';
 
   const navigate = useNavigate();

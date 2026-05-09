@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useApp } from '../store/AppContext';
-import { Save, Trash2, AlertTriangle } from 'lucide-react';
+import { ArrowLeft, Trash2, AlertTriangle } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 
 export function Settings() {
   const { state, updateSettings, clearAllData } = useApp();
@@ -9,19 +10,32 @@ export function Settings() {
   const [startingBalance, setStartingBalance] = useState(settings.startingBalance.toString());
   const [minTradeAmount, setMinTradeAmount] = useState(settings.minTradeAmount.toString());
   const [defaultPayout, setDefaultPayout] = useState(settings.defaultPayout.toString());
-  const [isSaved, setIsSaved] = useState(false);
+  const [maxLosses, setMaxLosses] = useState(settings.maxConsecutiveLosses?.toString() || '5');
+  const [maxWins, setMaxWins] = useState(settings.maxWins?.toString() || '10');
   const [showConfirmClear, setShowConfirmClear] = useState(false);
 
-  const handleSave = () => {
+  const navigate = useNavigate();
+
+  // Auto-save settings when they change
+  useEffect(() => {
     const newSettings = {
       startingBalance: parseFloat(startingBalance) || settings.startingBalance,
       minTradeAmount: parseFloat(minTradeAmount) || settings.minTradeAmount,
       defaultPayout: parseFloat(defaultPayout) || settings.defaultPayout,
+      maxConsecutiveLosses: parseInt(maxLosses) || (settings.maxConsecutiveLosses || 5),
+      maxWins: parseInt(maxWins) || (settings.maxWins || 10),
     };
-    updateSettings(newSettings);
-    setIsSaved(true);
-    setTimeout(() => setIsSaved(false), 3000);
-  };
+    // Only update if there's an actual change to prevent infinite loops if state objects change
+    if (
+      newSettings.startingBalance !== settings.startingBalance ||
+      newSettings.minTradeAmount !== settings.minTradeAmount ||
+      newSettings.defaultPayout !== settings.defaultPayout ||
+      newSettings.maxConsecutiveLosses !== settings.maxConsecutiveLosses ||
+      newSettings.maxWins !== settings.maxWins
+    ) {
+      updateSettings(newSettings);
+    }
+  }, [startingBalance, minTradeAmount, defaultPayout, maxLosses, maxWins, settings, updateSettings]);
 
   const handleClearData = () => {
     clearAllData();
@@ -30,6 +44,8 @@ export function Settings() {
     setStartingBalance('100');
     setMinTradeAmount('1');
     setDefaultPayout('85');
+    setMaxLosses('5');
+    setMaxWins('10');
   };
 
   return (
@@ -76,17 +92,37 @@ export function Settings() {
               />
               <p className="text-xs text-zinc-500">Pre-filled payout percentage for new trades.</p>
             </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-zinc-300">Max Consecutive Losses</label>
+              <input
+                type="number"
+                value={maxLosses}
+                onChange={(e) => setMaxLosses(e.target.value)}
+                className="flex h-10 w-full rounded-md border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm text-zinc-50 placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+              />
+              <p className="text-xs text-zinc-500">Session stops after this many consecutive losses.</p>
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-zinc-300">Session Win Target</label>
+              <input
+                type="number"
+                value={maxWins}
+                onChange={(e) => setMaxWins(e.target.value)}
+                className="flex h-10 w-full rounded-md border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm text-zinc-50 placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+              />
+              <p className="text-xs text-zinc-500">Session stops after reaching this many total wins.</p>
+            </div>
           </div>
 
           <div className="pt-4 flex items-center gap-4">
             <button
-              onClick={handleSave}
-              className="inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 disabled:pointer-events-none disabled:opacity-50 bg-emerald-500 text-zinc-950 hover:bg-emerald-500/90 h-10 px-6 py-2"
+              onClick={() => navigate(-1)}
+              className="inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 border border-zinc-700 bg-transparent text-zinc-300 hover:bg-zinc-800 h-10 px-6 py-2"
             >
-              <Save className="mr-2 h-4 w-4" />
-              Save Settings
+              <ArrowLeft className="mr-2 h-4 w-4" />
+              Return
             </button>
-            {isSaved && <span className="text-sm text-emerald-400 font-medium">Settings saved successfully!</span>}
+            <span className="text-sm text-zinc-500 italic">Settings are saved automatically.</span>
           </div>
         </div>
       </div>

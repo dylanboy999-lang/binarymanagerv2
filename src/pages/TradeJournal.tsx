@@ -10,8 +10,6 @@ export function TradeJournal() {
   const { sessions } = state;
 
   const [searchTerm, setSearchTerm] = useState('');
-  const [editingTradeId, setEditingTradeId] = useState<string | null>(null);
-  const [editNotes, setEditNotes] = useState('');
   const [showConfirmClear, setShowConfirmClear] = useState(false);
 
   // Flatten all trades and attach session info
@@ -20,26 +18,16 @@ export function TradeJournal() {
       ...trade,
       sessionId: session.id,
       sessionDate: session.startTime,
+      sessionStartingBalance: session.startingBalance,
     }))
   ).sort((a, b) => b.timestamp - a.timestamp);
 
   const filteredTrades = allTrades.filter((trade) =>
-    trade.asset.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    trade.notes.toLowerCase().includes(searchTerm.toLowerCase())
+    trade.asset.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  const handleEditClick = (tradeId: string, currentNotes: string) => {
-    setEditingTradeId(tradeId);
-    setEditNotes(currentNotes);
-  };
-
-  const handleSaveNotes = (sessionId: string, tradeId: string) => {
-    updateTrade(sessionId, tradeId, { notes: editNotes });
-    setEditingTradeId(null);
-  };
-
   const handleExportCSV = () => {
-    const headers = ['Date', 'Time', 'Session ID', 'Trade #', 'Asset', 'Payout %', 'Direction', 'Amount', 'Result', 'Profit/Loss', 'Balance After', 'Next Amount', 'Notes'];
+    const headers = ['Date', 'Time', 'Session ID', 'Trade #', 'Asset', 'Payout %', 'Direction', 'Amount', 'Result', 'Profit/Loss', 'Balance After', 'Next Amount', 'P/L Total'];
     const rows = allTrades.map(t => [
       format(t.timestamp, 'yyyy-MM-dd'),
       format(t.timestamp, 'HH:mm:ss'),
@@ -53,7 +41,7 @@ export function TradeJournal() {
       t.profit.toFixed(2),
       t.balanceAfter.toFixed(2),
       t.nextTradeAmount.toFixed(2),
-      `"${t.notes.replace(/"/g, '""')}"`
+      (t.balanceAfter - t.sessionStartingBalance).toFixed(2)
     ]);
 
     const csvContent = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
@@ -193,67 +181,42 @@ export function TradeJournal() {
                   <th className="px-6 py-3 font-medium">Result</th>
                   <th className="px-6 py-3 font-medium">P/L</th>
                   <th className="px-6 py-3 font-medium">Bal After</th>
-                  <th className="px-6 py-3 font-medium w-1/4">Notes</th>
+                  <th className="px-6 py-3 font-medium">P/L Total</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-zinc-800">
-                {filteredTrades.map((trade) => (
-                  <tr key={trade.id} className="hover:bg-zinc-800/30 transition-colors">
-                    <td className="px-6 py-4 text-zinc-300">
-                      <div className="font-medium">{format(trade.timestamp, 'MMM d, yyyy')}</div>
-                      <div className="text-xs text-zinc-500">{format(trade.timestamp, 'HH:mm:ss')}</div>
-                    </td>
-                    <td className="px-6 py-4 text-zinc-300">
-                      {trade.asset} <span className="text-zinc-500 text-xs ml-1">{trade.payout}%</span>
-                    </td>
-                    <td className="px-6 py-4">
-                      <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${trade.direction === 'Call' ? 'bg-emerald-500/10 text-emerald-400' : 'bg-red-500/10 text-red-400'}`}>
-                        {trade.direction}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 text-zinc-300">${trade.tradeAmount.toFixed(2)}</td>
-                    <td className="px-6 py-4">
-                      <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${trade.result === 'Win' ? 'bg-emerald-500/10 text-emerald-400' : 'bg-red-500/10 text-red-400'}`}>
-                        {trade.result}
-                      </span>
-                    </td>
-                    <td className={`px-6 py-4 font-medium ${trade.profit >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                      {trade.profit >= 0 ? '+' : ''}{trade.profit.toFixed(2)}
-                    </td>
-                    <td className="px-6 py-4 text-zinc-300">${trade.balanceAfter.toFixed(2)}</td>
-                    <td className="px-6 py-4 text-zinc-400">
-                      {editingTradeId === trade.id ? (
-                        <div className="flex items-center gap-2">
-                          <input
-                            type="text"
-                            value={editNotes}
-                            onChange={(e) => setEditNotes(e.target.value)}
-                            className="flex h-8 w-full rounded-md border border-zinc-800 bg-zinc-950 px-3 py-1 text-sm text-zinc-50 placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                            autoFocus
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter') handleSaveNotes(trade.sessionId, trade.id);
-                              if (e.key === 'Escape') setEditingTradeId(null);
-                            }}
-                          />
-                          <button
-                            onClick={() => handleSaveNotes(trade.sessionId, trade.id)}
-                            className="text-xs text-emerald-400 hover:text-emerald-300 font-medium"
-                          >
-                            Save
-                          </button>
-                        </div>
-                      ) : (
-                        <div
-                          className="cursor-pointer hover:text-zinc-300 truncate max-w-[200px]"
-                          onClick={() => handleEditClick(trade.id, trade.notes)}
-                          title="Click to edit notes"
-                        >
-                          {trade.notes || <span className="text-zinc-600 italic">Add note...</span>}
-                        </div>
-                      )}
-                    </td>
-                  </tr>
-                ))}
+                {filteredTrades.map((trade) => {
+                  const tradePL = trade.balanceAfter - trade.sessionStartingBalance;
+                  return (
+                    <tr key={trade.id} className="hover:bg-zinc-800/30 transition-colors">
+                      <td className="px-6 py-4 text-zinc-300">
+                        <div className="font-medium">{format(trade.timestamp, 'MMM d, yyyy')}</div>
+                        <div className="text-xs text-zinc-500">{format(trade.timestamp, 'HH:mm:ss')}</div>
+                      </td>
+                      <td className="px-6 py-4 text-zinc-300">
+                        {trade.asset} <span className="text-zinc-500 text-xs ml-1">{trade.payout}%</span>
+                      </td>
+                      <td className="px-6 py-4">
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${trade.direction === 'Call' ? 'bg-emerald-500/10 text-emerald-400' : 'bg-red-500/10 text-red-400'}`}>
+                          {trade.direction}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 text-zinc-300">${trade.tradeAmount.toFixed(2)}</td>
+                      <td className="px-6 py-4">
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${trade.result === 'Win' ? 'bg-emerald-500/10 text-emerald-400' : 'bg-red-500/10 text-red-400'}`}>
+                          {trade.result}
+                        </span>
+                      </td>
+                      <td className={`px-6 py-4 font-medium ${trade.profit >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                        {trade.profit >= 0 ? '+' : ''}{trade.profit.toFixed(2)}
+                      </td>
+                      <td className="px-6 py-4 text-zinc-300">${trade.balanceAfter.toFixed(2)}</td>
+                      <td className={`px-6 py-4 font-medium ${tradePL >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                        {tradePL >= 0 ? '+' : ''}{tradePL.toFixed(2)}
+                      </td>
+                    </tr>
+                  )
+                })}
               </tbody>
             </table>
           )}

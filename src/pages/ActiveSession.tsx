@@ -13,12 +13,12 @@ export function ActiveSession() {
   const [asset, setAsset] = useState('EUR/USD');
   const [payout, setPayout] = useState(settings.defaultPayout.toString());
   const [direction, setDirection] = useState<TradeDirection>('Call');
-  const [notes, setNotes] = useState('');
   const [showInsufficientBalancePopup, setShowInsufficientBalancePopup] = useState(false);
   const [pendingTradeResult, setPendingTradeResult] = useState<TradeResult | null>(null);
   const [customTradeAmount, setCustomTradeAmount] = useState('');
   const [overrideTradeAmount, setOverrideTradeAmount] = useState<number | null>(null);
   const [showEmoji, setShowEmoji] = useState<'Win' | 'Loss' | null>(null);
+  const [showEndSessionConfirm, setShowEndSessionConfirm] = useState(false);
 
   const trades = session?.trades || [];
   const lastTrade = trades[trades.length - 1];
@@ -73,8 +73,8 @@ export function ActiveSession() {
     const balanceColor = pl > 0 ? 'text-emerald-400' : pl < 0 ? 'text-red-400' : 'text-zinc-50';
     
     let reason = 'Session ended manually.';
-    if (session.status === 'stopped_loss_limit') reason = 'Session ended: Loss limit reached (5 consecutive losses).';
-    if (session.status === 'stopped_win_limit') reason = 'Session ended: Win limit reached (10 wins).';
+    if (session.status === 'stopped_loss_limit') reason = `Session ended: Loss limit reached (${settings.maxConsecutiveLosses} consecutive losses).`;
+    if (session.status === 'stopped_win_limit') reason = `Session ended: Win limit reached (${settings.maxWins} wins).`;
 
     return (
       <div className="flex flex-col items-center justify-center h-[60vh] text-center space-y-6">
@@ -181,7 +181,6 @@ export function ActiveSession() {
       direction,
       result,
       tradeAmount: amount,
-      notes,
       timestamp: Date.now(),
     });
 
@@ -193,7 +192,6 @@ export function ActiveSession() {
       }, 3000);
     }
 
-    setNotes('');
     setShowInsufficientBalancePopup(false);
     setPendingTradeResult(null);
     setCustomTradeAmount('');
@@ -211,7 +209,7 @@ export function ActiveSession() {
           <p className="text-zinc-400 mt-1">Log your trades and track your progress.</p>
         </div>
         <button
-          onClick={endSession}
+          onClick={() => setShowEndSessionConfirm(true)}
           className="inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 disabled:pointer-events-none disabled:opacity-50 border border-red-500/20 bg-red-500/10 text-red-400 hover:bg-red-500/20 h-10 px-4 py-2"
         >
           <StopCircle className="mr-2 h-4 w-4" />
@@ -236,9 +234,9 @@ export function ActiveSession() {
         <div className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-4 shadow-sm">
           <div className="text-sm font-medium text-zinc-400">Session Rules</div>
           <div className="text-xl font-bold text-zinc-50 mt-1">
-            <span className="text-emerald-400">{wins}/10 W</span>
+            <span className="text-emerald-400">{wins}/{settings.maxWins} W</span>
             <span className="text-zinc-600 mx-2">|</span>
-            <span className="text-red-400">{consecutiveLosses}/5 L</span>
+            <span className="text-red-400">{consecutiveLosses}/{settings.maxConsecutiveLosses} L</span>
           </div>
           <div className="text-xs text-zinc-500 mt-1">Auto-stops at limits</div>
         </div>
@@ -310,16 +308,6 @@ export function ActiveSession() {
                 </button>
               </div>
             </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-zinc-300">Notes (Optional)</label>
-              <input
-                type="text"
-                value={notes}
-                onChange={(e) => setNotes(e.target.value)}
-                className="flex h-10 w-full rounded-md border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm text-zinc-50 placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                placeholder="Strategy, mood, etc."
-              />
-            </div>
           </div>
 
           <div className="mt-8 flex flex-col gap-4">
@@ -380,38 +368,41 @@ export function ActiveSession() {
                   <th className="px-6 py-3 font-medium">Dir</th>
                   <th className="px-6 py-3 font-medium">Amount</th>
                   <th className="px-6 py-3 font-medium">Result</th>
-                  <th className="px-6 py-3 font-medium">P/L</th>
+                  <th className="px-6 py-3 font-medium">P/L Total</th>
                   <th className="px-6 py-3 font-medium">Bal After</th>
                   <th className="px-6 py-3 font-medium">Next Amt</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-zinc-800">
-                {[...trades].reverse().map((trade) => (
-                  <tr key={trade.id} className="hover:bg-zinc-800/30 transition-colors">
-                    <td className="px-6 py-4 text-zinc-300 font-medium">{trade.tradeNumber}</td>
-                    <td className="px-6 py-4 text-zinc-400">{format(trade.timestamp, 'HH:mm:ss')}</td>
-                    <td className="px-6 py-4 text-zinc-300">{trade.asset} <span className="text-zinc-500 text-xs ml-1">{trade.payout}%</span></td>
-                    <td className="px-6 py-4">
-                      <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${trade.direction === 'Call' ? 'bg-emerald-500/10 text-emerald-400' : 'bg-red-500/10 text-red-400'}`}>
-                        {trade.direction}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 text-zinc-300">${trade.tradeAmount.toFixed(2)}</td>
-                    <td className="px-6 py-4">
-                      <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${trade.result === 'Win' ? 'bg-emerald-500/10 text-emerald-400' : 'bg-red-500/10 text-red-400'}`}>
-                        {trade.result}
-                      </span>
-                    </td>
-                    <td className={`px-6 py-4 font-medium ${trade.profit >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                      {trade.profit >= 0 ? '+' : ''}{trade.profit.toFixed(2)}
-                    </td>
-                    <td className="px-6 py-4 text-zinc-300">${trade.balanceAfter.toFixed(2)}</td>
-                    <td className="px-6 py-4 text-zinc-400 flex items-center">
-                      <ArrowRight className="w-3 h-3 mr-1" />
-                      ${trade.nextTradeAmount.toFixed(2)}
-                    </td>
-                  </tr>
-                ))}
+                {[...trades].reverse().map((trade) => {
+                  const tradePL = trade.balanceAfter - session.startingBalance;
+                  return (
+                    <tr key={trade.id} className="hover:bg-zinc-800/30 transition-colors">
+                      <td className="px-6 py-4 text-zinc-300 font-medium">{trade.tradeNumber}</td>
+                      <td className="px-6 py-4 text-zinc-400">{format(trade.timestamp, 'HH:mm:ss')}</td>
+                      <td className="px-6 py-4 text-zinc-300">{trade.asset} <span className="text-zinc-500 text-xs ml-1">{trade.payout}%</span></td>
+                      <td className="px-6 py-4">
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${trade.direction === 'Call' ? 'bg-emerald-500/10 text-emerald-400' : 'bg-red-500/10 text-red-400'}`}>
+                          {trade.direction}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 text-zinc-300">${trade.tradeAmount.toFixed(2)}</td>
+                      <td className="px-6 py-4">
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${trade.result === 'Win' ? 'bg-emerald-500/10 text-emerald-400' : 'bg-red-500/10 text-red-400'}`}>
+                          {trade.result}
+                        </span>
+                      </td>
+                      <td className={`px-6 py-4 font-medium ${tradePL >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                        {tradePL >= 0 ? '+' : ''}{tradePL.toFixed(2)}
+                      </td>
+                      <td className="px-6 py-4 text-zinc-300">${trade.balanceAfter.toFixed(2)}</td>
+                      <td className="px-6 py-4 text-zinc-400 flex items-center">
+                        <ArrowRight className="w-3 h-3 mr-1" />
+                        ${trade.nextTradeAmount.toFixed(2)}
+                      </td>
+                    </tr>
+                  )
+                })}
               </tbody>
             </table>
           )}
@@ -487,6 +478,33 @@ export function ActiveSession() {
                 className="w-full rounded-md bg-amber-500 px-4 py-2 text-sm font-medium text-zinc-950 hover:bg-amber-500/90 transition-colors disabled:opacity-50"
               >
                 Trade Max (${session.currentBalance.toFixed(2)})
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* End Session Confirm Popup */}
+      {showEndSessionConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+          <div className="bg-zinc-900 border border-zinc-800 rounded-xl shadow-xl max-w-sm w-full p-6 space-y-6">
+            <h3 className="text-lg font-bold text-zinc-50">End Session?</h3>
+            <p className="text-zinc-300">Are you sure you want to exit the current session?</p>
+            <div className="flex justify-end gap-3 pt-2">
+              <button
+                onClick={() => setShowEndSessionConfirm(false)}
+                className="rounded-md border border-zinc-800 bg-zinc-950 px-4 py-2 text-sm font-medium text-zinc-300 hover:bg-zinc-800 transition-colors"
+              >
+                Return to session
+              </button>
+              <button
+                onClick={() => {
+                  setShowEndSessionConfirm(false);
+                  endSession();
+                }}
+                className="rounded-md bg-red-500 px-4 py-2 text-sm font-medium text-zinc-950 hover:bg-red-500/90 transition-colors"
+              >
+                Exit
               </button>
             </div>
           </div>
